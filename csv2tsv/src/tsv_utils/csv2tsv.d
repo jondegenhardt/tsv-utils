@@ -208,19 +208,18 @@ alias NullableSizeT = Nullable!(size_t, size_t.max);
  */
 void csv2tsvFiles(in Csv2tsvOptions cmdopt, in string[] inputFiles)
 {
-    import std.algorithm : joiner;
     import tsv_utils.common.utils : BufferedOutputRange;
 
-    ubyte[1024 * 1024] fileRawBuf;
-    ubyte[] stdinRawBuf = fileRawBuf[0..1024];
+    ubyte[1024 * 128] buffer;
+
     auto stdoutWriter = BufferedOutputRange!(typeof(stdout))(stdout);
     bool firstFile = true;
 
     foreach (filename; (inputFiles.length > 0) ? inputFiles : ["-"])
     {
-        auto ubyteChunkedStream = (filename == "-") ?
-            stdin.byChunk(stdinRawBuf) : filename.File.byChunk(fileRawBuf);
-        auto ubyteStream = ubyteChunkedStream.joiner;
+        auto inputStream = (filename == "-") ? stdin : filename.File;
+        auto chunkedStream = inputStream.byChunk(buffer);
+        auto ubyteStream = chunkedStream.ubytesByChunk;
 
         if (firstFile || !cmdopt.hasHeader)
         {
@@ -250,7 +249,7 @@ void csv2tsvFiles(in Csv2tsvOptions cmdopt, in string[] inputFiles)
  *
  * Params:
  *   InputRange          =  A ubyte input range to read CSV text from. A ubyte range
- *                          matched byChunck. It also avoids convesion to dchar by front().
+ *                          matched byChunk. It also avoids conversion to dchar by front().
  *   OutputRange         =  An output range to write TSV text to.
  *   filename            =  Name of file to use when reporting errors. A descriptive name
  *                       =  can be used in lieu of a file name.
@@ -865,4 +864,55 @@ unittest
                format("Unittest failure. tsv_max2_rest != tsvMax2RestResult.data. Test: %d\ncsv: |%s|\ntsv: |%s|\nres: |%s|\n",
                       i + 1, csv, tsv_max2_rest, tsvMax2RestResult.data));
     }
+}
+
+/** Turns a input range of ubyte chunks into a range of ubytes. Essentially a custom
+ * version of joiner.
+ *
+ * This was written in an attempt to find performance limitations in csv2tsv. This
+ * is mildly faster than joiner, but not enough to warrant replacing joiner.
+ */
+auto ubytesByChunk(InputRange)(auto ref InputRange inputChunks)
+if (isInputRange!InputRange && is(Unqual!(ElementType!InputRange) == ubyte[]))
+{
+    import std.range;
+
+    static final class UbytesByChunkImpl
+    {
+        private InputRange _chunks;
+        private ubyte[] _chars;
+
+        this(ref InputRange inputChunks)
+        {
+            _chunks = inputChunks;
+            if (!_chunks.empty) _chars = _chunks.front;
+        }
+
+        bool empty() const
+        {
+            return _chars.empty && _chunks.empty;
+        }
+
+        ubyte front()
+        {
+            assert(!empty, "Attempt to take the front of an empty ubytesByChunk.");
+
+            return _chars.front;
+        }
+
+        void popFront()
+        {
+            assert(!empty, "Attempt to take the front of an empty ubytesByChunk.");
+
+            _chars.popFront;
+
+            if (_chars.empty && !_chunks.empty)
+            {
+                _chunks.popFront;
+                _chars = _chunks.front;
+            }
+        }
+    }
+
+    return new UbytesByChunkImpl(inputChunks);
 }
