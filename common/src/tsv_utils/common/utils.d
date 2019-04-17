@@ -507,6 +507,22 @@ if (isFileHandle!(Unqual!OutputTarget) || isOutputRange!(Unqual!OutputTarget, ch
 
     void append(T)(T stuff)
     {
+        import std.traits;
+        static if (isFileHandle!OutputTarget && (isSomeString!T || is(unqual!T == ubyte[])))
+        {
+            /* Experimental optimization - if writing a long line and will immediately flush,
+             * don't copy the buffer, just do two writes instead. Tests show its a little
+             * faster. Needs more work before it can be released.
+             */
+            if (stuff.length >= 1024 * 16 &&
+                _outputBuffer.data.length + stuff.length >= _flushSize)
+            {
+                flush();
+                _outputTarget.write(stuff);
+                return;
+            }
+        }
+
         appendRaw(stuff);
         maybeFlush();
     }
