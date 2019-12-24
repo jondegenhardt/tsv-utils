@@ -17,143 +17,17 @@ matrix:
       dist: xenial
       group: travis_latest
       language: d
-      d: dmd
-      env: DUBTEST=1 MAKETEST=1 CODECOV=1
-    - os: osx
-      osx_image: xcode11
-      group: travis_latest
-      language: d
-      d: dmd
-      env: DUBTEST=1 MAKETEST=1
-    - os: linux
-      dist: xenial
-      group: travis_latest
-      language: d
-      d: ldc
-      env: LTOPGO_V2=default
-    - os: linux
-      dist: xenial
-      group: travis_latest
-      language: d
-      d: ldc-1.17.0
-      env: LINUX_SPECIAL=1 DEPLOY=1
-      # if: type IN (pull_request, cron)
-    - os: osx
-      osx_image: xcode11
-      group: travis_latest
-      language: d
-      d: ldc-1.17.0
-      env: LTOPGO_V2=default DEPLOY=1
-      # if: type IN (pull_request, cron)
-    - os: osx
-      osx_image: xcode11
-      group: travis_latest
-      language: d
-      d: ldc
-      env: LTOPGO_V2=default
-      if: type IN (pull_request, cron)
-    - os: linux
-      dist: xenial
-      group: travis_latest
-      language: d
-      d: ldc-1.6.0
-      env: DUBTEST=0 MAKETEST=1
-      if: type IN (pull_request, cron)
-    - os: linux
-      dist: xenial
-      group: travis_latest
-      language: d
-      d: ldc
-      env: DUBTEST=1 MAKETEST=1
-      if: type IN (pull_request)
-    - os: linux
-      dist: xenial
-      group: travis_latest
-      language: d
-      d: ldc
-      env: DUBTEST=1 MAKETEST=1 APPLTO=full
-      if: type IN (cron)
-    - os: linux
-      dist: xenial
-      group: travis_latest
-      language: d
-      d: ldc
-      env: APPLTO=thin ALLLTO=default
-      if: type IN (cron)
-    - os: linux
-      dist: xenial
-      group: travis_latest
-      language: d
-      d: ldc
-      env: LTOPGO=default
-      if: type IN (cron)
-    - os: linux
-      dist: xenial
-      sudo: required
-      group: travis_latest
-      language: d
-      d: ldc-1.7.0
-      services: docker
-      env: DOCKERSPECIAL=1
-      if: type IN (cron)
-    - os: linux
-      dist: xenial
-      sudo: required
-      group: travis_latest
-      language: d
-      d: ldc-1.12.0
-      services: docker
-      env: DOCKERSPECIAL=2
-      if: type IN (cron)
-    - os: linux
-      dist: xenial
-      group: travis_latest
-      language: d
-      d: ldc-beta
-      env: DUBTEST=1 MAKETEST=1 APPLTO=full
-      if: type IN (cron)
-    - os: linux
-      dist: xenial
-      group: travis_latest
-      language: d
-      d: ldc-beta
-      env: LTOPGO_V2=default
-      if: type IN (cron)
-    - os: osx
-      osx_image: xcode11
-      group: travis_latest
-      language: d
-      d: ldc-beta
-      env: LTOPGO_V2=default
-      if: type IN (cron)
-    - os: linux
-      dist: xenial
-      group: travis_latest
-      language: d
       d: dmd-nightly
       env: DUBTEST=1 MAKETEST=1
-      if: type IN (cron)
-    - os: osx
-      osx_image: xcode11
-      group: travis_latest
-      language: d
-      d: dmd-nightly
-      env: DUBTEST=1 MAKETEST=1
-      if: type IN (cron)
+
 before_install:
-  - if [[ "$DOCKERSPECIAL" == "1" ]]; then
-      sudo apt-get -qq update
-      && sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
-      && docker pull dlanguage/ldc:1.7.0;
-      export UID=$(id -u);
-      export GID=$(id -g);
-    elif [[ "$DOCKERSPECIAL" == "2" ]]; then
-      sudo apt-get -qq update
-      && sudo apt-get -y -o Dpkg::Options::="--force-confnew" install docker-ce
-      && docker pull dlang2/ldc-ubuntu:1.12.0;
-      export UID=$(id -u);
-      export GID=$(id -g);
-    fi
+- ulimit -c unlimited -S       # enable core dumps
+- sudo apt-get update
+
+install:
+- sudo apt-get install -y gdb
+- sudo apt-get install -y libc6-dbg
+
 script:
 - if [[ "$DUBTEST" == "1" ]]; then
     dub run -- --compiler=$DC
@@ -227,10 +101,16 @@ script:
     && make test-nobuild DCOMPILER=ldc2
     && make clean;
   fi
+
+after_failure:
+- COREFILE=$(find . -maxdepth 1 -name "core*" | head -n 1) # find core file
+- if [[ -f "$COREFILE" ]]; then gdb -c "$COREFILE" $(which dub) -ex "thread apply all bt" -ex "set pagination 0" -batch; fi
+
 after_success:
 - if [[ "$CODECOV" == "1" ]]; then
     bash <(curl -s https://codecov.io/bash) || echo "Codecov did not collect coverage reports";
   fi
+
 before_deploy:
 - if [[ -z "$TRAVIS_TAG" || "$TRAVIS_TAG" == "" ]]; then
     export USE_VERSION="v~dev";
@@ -248,6 +128,7 @@ before_deploy:
   else
     make package PKG_ROOT_DIR=tsv-utils DCOMPILER=$DC OS=$TRAVIS_OS_NAME APP_VERSION=$USE_VERSION LDC_LTO_RUNTIME=1 LDC_PGO=2 DFLAGS=-static;
   fi
+
 deploy:
   provider: releases
   api_key:
