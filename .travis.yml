@@ -104,7 +104,7 @@ script:
 
 after_failure:
 - COREFILE=$(find . -maxdepth 2 -name "core*" | head -n 1) # find core file
-- if [[ -f "$COREFILE" ]]; then gdb -c "$COREFILE" $(which dub) -ex "thread apply all bt" -ex "set pagination 0" -batch; fi
+- if [[ -f "$COREFILE" ]]; then gdb -c "$COREFILE" $(which dub) -ex "thread apply all bt" -ex "set pagination 0" -ex 'p $_siginfo' -batch; fi
 
 after_success:
 - if [[ "$CODECOV" == "1" ]]; then
