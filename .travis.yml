@@ -19,6 +19,12 @@ matrix:
       language: d
       d: dmd-nightly
       env: DUBTEST=1 MAKETEST=1
+    - os: linux
+      dist: bionic
+      group: travis_latest
+      language: d
+      d: dmd-nightly
+      env: DUBTEST=1 MAKETEST=1
 
 before_install:
 - ulimit -c unlimited -S       # enable core dumps
